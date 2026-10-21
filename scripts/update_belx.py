@@ -132,11 +132,8 @@ def main():
         with open(pdf, 'wb') as f:
             f.write(fetch(pdf_url))
         text = ocr_pdf(pdf, td)
-        date_pat = f'{today.month}/{today.day}'
-        # Prefer text near today's date; fall back to full OCR if the date OCR is weak.
-        pos = text.find(date_pat)
-        focus = text[max(0, pos-3000):pos+9000] if pos >= 0 else text
-        items = price_items(focus)
+        # Search all extracted flyer text. Date OCR is unreliable and can crop out the sale listings.
+        items = price_items(text)
         print(f'Flyer PDF: {pdf_url}')
         print(f'OCR preview: {text[:1200]}')
         if not items:
