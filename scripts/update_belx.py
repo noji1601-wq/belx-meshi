@@ -43,8 +43,8 @@ def ocr_pdf(pdf_path, outdir):
         print(f'Embedded text extraction unavailable: {e}; switching to OCR.', flush=True)
 
     prefix = os.path.join(outdir, 'page')
-    print('Step 2/3: rendering up to first 2 pages at 120 dpi', flush=True)
-    subprocess.run(['pdftoppm', '-f', '1', '-l', '2', '-jpeg', '-jpegopt', 'quality=75', '-r', '120', pdf_path, prefix], check=True, timeout=30)
+    print('Step 2/3: rendering up to first 4 pages at 180 dpi', flush=True)
+    subprocess.run(['pdftoppm', '-f', '1', '-l', '4', '-jpeg', '-jpegopt', 'quality=88', '-r', '180', pdf_path, prefix], check=True, timeout=30)
     pages = sorted(x for x in os.listdir(outdir) if x.startswith('page-') and x.endswith('.jpg'))
     if not pages:
         raise RuntimeError('PDF render produced no pages')
@@ -55,10 +55,10 @@ def ocr_pdf(pdf_path, outdir):
         try:
             result = subprocess.run(
                 ['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', '6'],
-                capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=35
+                capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=45
             )
         except subprocess.TimeoutExpired:
-            print(f'OCR page {i} exceeded 35 seconds; skipping page.', flush=True)
+            print(f'OCR page {i} exceeded 45 seconds; skipping page.', flush=True)
             continue
         if result.returncode == 0 and result.stdout.strip():
             texts.append(result.stdout)
