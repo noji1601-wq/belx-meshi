@@ -1,14 +1,41 @@
+"""ベルクス戸田店の公式チラシPDFを取得し、特売品の読み取りとレシピ3品の提案を行う。
+
+読み取りは Claude API（画像入力）を使う。環境変数 ANTHROPIC_API_KEY が無い場合は
+Tesseract による従来の OCR にフォールバックする（精度は低い）。
+"""
+import base64
 import datetime as dt
 import json
 import os
 import re
 import subprocess
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 
 STORE_URL = 'https://sunbelx.com/store/20'
 HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; BelxMeshiBot/1.0)'}
+JST = dt.timezone(dt.timedelta(hours=9))
+MODEL = os.environ.get('CLAUDE_MODEL', 'claude-sonnet-5-5')
+MAX_PAGES = 4
+
+PROMPT = """添付画像は、埼玉県戸田市「ベルクス 戸田店」の今日のチラシ（PDFの各ページ）です。今日は {today} です。
+
+1. 食材の特売品を読み取ってください（肉・魚・野菜・果物・卵・豆腐・乳製品・米・麺・調味料など料理に使うもの）。
+   日用品・お酒・お菓子・飲料は除外。価格が読めないものは price を null に。
+   日付指定のある商品は、今日 {today} が対象期間に入るものだけを入れてください。
+2. 読み取った特売品を中心に、2人分の晩ごはん向けレシピを3品提案してください。
+   主菜2品＋副菜か汁物1品の組み合わせにし、特売品をできるだけ多く、無駄なく使うこと。
+   基本調味料（塩・こしょう・醤油・砂糖・みりん・酒・味噌・油・ごま油・片栗粉・鶏がらスープの素）は家にある前提。
+3. shopping には、3品を作るのに特売品以外で買い足しが必要なものだけを入れてください。
+
+次の形のJSONだけを返してください。前後に文章は付けないこと。
+{{"sale_items":[{{"name":"国産豚こま切れ","price":98,"unit":"100g","note":"お一人様2点まで"}}],
+ "recipes":[{{"name":"料理名","minutes":20,"uses":["豚こま","キャベツ"],"reason":"一言でおすすめ理由",
+   "ingredients":["豚こま切れ 200g"],"steps":["手順1","手順2"]}}],
+ "shopping":["もやし"]}}
+recipes は必ず3件、steps は3〜6個。"""
 
 
 def fetch(url):
@@ -19,154 +46,146 @@ def fetch(url):
 
 def find_pdf(html):
     text = html.decode('utf-8', 'ignore')
-    # Store pages may contain older flyer links before the visible "PDF版チラシ" button.
     links = re.findall(r"""(?:href|src)=["']([^"']+\.pdf(?:\?[^"']*)?)["']""", text, re.I)
     candidates = []
     for link in links:
         url = urllib.parse.urljoin(STORE_URL, link)
-        if 'sunbelx.com/upload/Flyer/' in url:
+        if 'sunbelx.com/upload/Flyer/' in url and url not in candidates:
             candidates.append(url)
     if not candidates:
         raise RuntimeError('official flyer PDF link not found')
-    # The current flyer link is usually the final matching link in the store page.
+    print(f'Flyer PDF candidates: {candidates}', flush=True)
+    # 店舗ページでは古いリンクが先に出ることがあるため、最後のものを採用する。
     return candidates[-1]
 
 
-def ocr_pdf(pdf_path, outdir):
-    # Prefer embedded text; log each stage and bound OCR runtime.
-    txt_path = os.path.join(outdir, 'embedded.txt')
-    print('Step 1/3: trying embedded PDF text', flush=True)
-    try:
-        subprocess.run(['pdftotext', '-layout', pdf_path, txt_path], check=True, timeout=12)
-        with open(txt_path, encoding='utf-8', errors='ignore') as f:
-            embedded = f.read()
-        if len(embedded) > 100 and len(re.findall(r'[ぁ-んァ-ヶ一-龠]', embedded)) > 30:
-            print(f'Embedded text found ({len(embedded)} characters).', flush=True)
-            return embedded
-        print('No usable embedded text; switching to OCR.', flush=True)
-    except (subprocess.SubprocessError, OSError) as e:
-        print(f'Embedded text extraction unavailable: {e}; switching to OCR.', flush=True)
-
-    prefix = os.path.join(outdir, 'page')
-    print('Step 2/3: rendering up to first 4 pages at 180 dpi', flush=True)
-    subprocess.run(['pdftoppm', '-f', '1', '-l', '4', '-jpeg', '-jpegopt', 'quality=88', '-r', '180', pdf_path, prefix], check=True, timeout=30)
-    pages = sorted(x for x in os.listdir(outdir) if x.startswith('page-') and x.endswith('.jpg'))
+def render_pages(pdf_path, outdir, dpi):
+    prefix = os.path.join(outdir, f'page{dpi}')
+    subprocess.run(
+        ['pdftoppm', '-f', '1', '-l', str(MAX_PAGES), '-jpeg', '-jpegopt', 'quality=85',
+         '-r', str(dpi), pdf_path, prefix],
+        check=True, timeout=60,
+    )
+    pages = sorted(
+        os.path.join(outdir, x) for x in os.listdir(outdir)
+        if x.startswith(f'page{dpi}-') and x.endswith('.jpg')
+    )
     if not pages:
         raise RuntimeError('PDF render produced no pages')
+    return pages
+
+
+def parse_json(text):
+    text = text.strip()
+    m = re.search(r'```(?:json)?\s*(.*?)```', text, re.S)
+    if m:
+        text = m.group(1)
+    start, end = text.find('{'), text.rfind('}')
+    if start < 0 or end < 0:
+        raise ValueError('no JSON object in reply')
+    return json.loads(text[start:end + 1])
+
+
+def ask_claude(pages, today, api_key):
+    content = []
+    for p in pages:
+        with open(p, 'rb') as f:
+            b64 = base64.b64encode(f.read()).decode()
+        content.append({'type': 'image', 'source': {'type': 'base64', 'media_type': 'image/jpeg', 'data': b64}})
+    content.append({'type': 'text', 'text': PROMPT.format(today=today.isoformat())})
+    body = json.dumps({
+        'model': MODEL,
+        'max_tokens': 4000,
+        'messages': [{'role': 'user', 'content': content}],
+    }).encode()
+    req = urllib.request.Request(
+        'https://api.anthropic.com/v1/messages', data=body, method='POST',
+        headers={'x-api-key': api_key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json'},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r:
+            res = json.load(r)
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f'Claude API error {e.code}: {e.read().decode(errors="ignore")[:500]}')
+    reply = ''.join(b.get('text', '') for b in res.get('content', []) if b.get('type') == 'text')
+    data = parse_json(reply)
+    items = [x for x in data.get('sale_items', []) if isinstance(x, dict) and x.get('name')]
+    recipes = [x for x in data.get('recipes', []) if isinstance(x, dict) and x.get('name')][:3]
+    shopping = [str(x) for x in data.get('shopping', []) if x]
+    return items, recipes, shopping
+
+
+def tesseract_text(pages):
     texts = []
-    for i, page in enumerate(pages, 1):
-        p = os.path.join(outdir, page)
-        print(f'Step 3/3: OCR page {i}/{len(pages)}', flush=True)
-        # Flyers are multi-column layouts: sparse-text mode is usually more reliable
-        # than treating the entire page as one text block. Try both modes and keep
-        # the result with more Japanese text, while bounding runtime.
-        candidates = []
-        for psm in ('11', '6'):
-            try:
-                result = subprocess.run(
-                    ['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', psm],
-                    capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=35
-                )
-            except subprocess.TimeoutExpired:
-                print(f'OCR page {i} PSM {psm} timed out; trying next mode.', flush=True)
-                continue
-            if result.returncode == 0 and result.stdout.strip():
-                candidates.append(result.stdout)
-        if candidates:
-            best = max(candidates, key=lambda x: len(re.findall(r'[ぁ-んァ-ヶ一-龠]', x)))
-            texts.append(best)
-            print(f'OCR page {i}: selected text with {len(re.findall(r"[ぁ-んァ-ヶ一-龠]", best))} Japanese characters.', flush=True)
-        else:
-            print(f'OCR returned no text for page {i}.', flush=True)
+    for i, p in enumerate(pages, 1):
+        try:
+            r = subprocess.run(['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', '11'],
+                               capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=40)
+            texts.append(r.stdout)
+        except subprocess.TimeoutExpired:
+            print(f'OCR page {i} timed out', flush=True)
     return '\n'.join(texts)
 
 
-def price_items(text):
-    patterns = [
-        ('豚こま', r'豚(?:肉)?こま[^\n]{0,40}?(\d{2,4})円'),
-        ('豚肉', r'豚肉[^\n]{0,40}?(\d{2,4})円'),
-        ('鶏もも肉', r'若鶏(?:モモ|もも)肉[^\n]{0,40}?(\d{2,4})円'),
-        ('鶏むね肉', r'若鶏(?:ムネ|むね)肉[^\n]{0,40}?(\d{2,4})円'),
-        ('牛肉', r'牛肉[^\n]{0,40}?(\d{2,4})円'),
-        ('鮭', r'(?:鮭|サーモン)[^\n]{0,40}?(\d{2,4})円'),
-        ('ぶり', r'ぶり[^\n]{0,40}?(\d{2,4})円'),
-        ('白菜', r'白菜[^\n]{0,40}?(\d{2,4})円'),
-        ('キャベツ', r'キャベツ[^\n]{0,40}?(\d{2,4})円'),
-        ('長ねぎ', r'長ねぎ[^\n]{0,40}?(\d{2,4})円'),
-        ('ほうれん草', r'ほうれん草[^\n]{0,40}?(\d{2,4})円'),
-        ('なす', r'なす[^\n]{0,40}?(\d{2,4})円'),
-        ('卵', r'(?:たまご|卵)[^\n]{0,40}?(\d{2,4})円'),
-        ('豆腐', r'豆腐[^\n]{0,40}?(\d{2,4})円'),
-        ('納豆', r'納豆[^\n]{0,40}?(\d{2,4})円'),
-    ]
+def fallback_items(text):
+    """APIキーが無いときの簡易抽出。代表的な食材名の近くにある価格だけ拾う。"""
+    labels = ['豚こま', '豚肉', '鶏もも', '鶏むね', '牛肉', 'ひき肉', '鮭', 'ぶり', 'さば', '白菜', 'キャベツ',
+              '長ねぎ', '玉ねぎ', 'じゃがいも', 'にんじん', 'ほうれん草', 'もやし', 'なす', 'たまご', '卵', '豆腐', '納豆']
+    compact = re.sub(r'\s+', '', text)
     found = []
-    for name, pat in patterns:
-        m = re.search(pat, text, re.I)
-        if m:
-            found.append({'name': name, 'price': int(m.group(1))})
-    if not found:
-        # OCR sometimes drops the yen sign and splits price from product name.
-        compact = re.sub(r'\s+', '', text)
-        labels = [('豚こま', '豚こま'), ('豚肉', '豚肉'), ('鶏もも肉', '鶏もも'), ('鶏むね肉', '鶏むね'), ('牛肉', '牛肉'), ('鮭', '鮭'), ('ぶり', 'ぶり'), ('白菜', '白菜'), ('キャベツ', 'キャベツ'), ('長ねぎ', '長ねぎ'), ('ほうれん草', 'ほうれん草'), ('なす', 'なす'), ('卵', 'たまご|卵'), ('豆腐', '豆腐'), ('納豆', '納豆')]
-        for name, label in labels:
-            m = re.search(label + r'.{0,100}?(\d{2,4})', compact, re.I)
-            if m and 10 <= int(m.group(1)) <= 5000:
-                found.append({'name': name, 'price': int(m.group(1))})
+    for label in labels:
+        m = re.search(re.escape(label) + r'.{0,40}?(\d{2,4})円?', compact)
+        if m and 10 <= int(m.group(1)) <= 3000:
+            found.append({'name': label, 'price': int(m.group(1)), 'unit': '', 'note': 'OCR推定'})
     return found
 
 
-def recipes(items):
-    names = {x['name'] for x in items}
-    out = []
-    def add(title, use, extra, steps):
-        out.append({'title': title, 'use': use, 'extra': extra, 'steps': steps})
-    if '豚こま' in names or '豚肉' in names:
-        add('豚こま野菜炒め', '豚こま＋キャベツ・長ねぎ等', ['もやし', '焼肉のたれ'], '豚肉を炒め、野菜を加えて火を通し、焼肉のたれで仕上げる。')
-    if '鶏もも肉' in names or '鶏むね肉' in names:
-        add('鶏の照り焼き丼', '鶏肉＋長ねぎ等', ['醤油', 'みりん', '砂糖', 'ご飯'], '鶏肉を焼き、醤油・みりん・砂糖を加えて煮絡め、ご飯にのせる。')
-    if '鮭' in names or 'ぶり' in names:
-        add('魚の照り焼き定食', '鮭・ぶり等＋野菜', ['醤油', 'みりん', 'ご飯'], '魚を焼き、醤油・みりんを加えて照りが出るまで煮絡める。')
-    if '牛肉' in names:
-        add('牛肉と野菜の甘辛炒め', '牛肉＋野菜', ['醤油', '砂糖', 'ご飯'], '牛肉と野菜を炒め、醤油と砂糖で甘辛く味付けする。')
-    if '卵' in names and ('豚こま' in names or '豚肉' in names):
-        add('豚たま丼', '豚肉＋卵＋長ねぎ', ['めんつゆ', 'ご飯'], '豚肉とねぎを煮て、溶き卵を回し入れて半熟で止め、ご飯にのせる。')
-    if '豆腐' in names and ('豚こま' in names or '豚肉' in names):
-        add('豚肉豆腐', '豚肉＋豆腐', ['めんつゆ', '長ねぎ'], '豚肉を煮て豆腐を加え、めんつゆで味を整える。')
-    while len(out) < 3:
-        add('特売肉と野菜の簡単炒め', '特売の肉＋特売野菜', ['塩こしょう', '醤油', 'ご飯'], '肉を炒め、野菜を加え、塩こしょうと醤油で味付けする。')
-    return out[:3]
+def write(data):
+    with open('data.json', 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
 
 
 def main():
-    today = dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).date()
+    now = dt.datetime.now(JST)
+    today = now.date()
+    base = {
+        'date': today.isoformat(),
+        'source': 'ベルクス戸田店 公式チラシ',
+        'source_url': None,
+        'status': 'ok',
+        'sale_items': [],
+        'recipes': [],
+        'shopping': [],
+        'updated_at': now.isoformat(timespec='minutes'),
+    }
     with tempfile.TemporaryDirectory() as td:
-        html = fetch(STORE_URL)
-        pdf_url = find_pdf(html)
+        pdf_url = find_pdf(fetch(STORE_URL))
+        base['source_url'] = pdf_url
         pdf = os.path.join(td, 'flyer.pdf')
         with open(pdf, 'wb') as f:
             f.write(fetch(pdf_url))
-        text = ocr_pdf(pdf, td)
-        # Search all extracted flyer text. Date OCR is unreliable and can crop out the sale listings.
-        items = price_items(text)
-        print(f'Flyer PDF: {pdf_url}')
-        print(f'OCR preview: {text[:1200]}')
-        if not items:
-            data = {'date': today.isoformat(), 'source': 'ベルクス戸田店 公式チラシ', 'source_url': pdf_url, 'status': 'ocr_no_items', 'sale_items': [], 'recipes': [], 'shopping': [], 'updated_at': dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).isoformat(timespec='minutes')}
-            with open('data.json', 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            print('No reliable sale items found; did not invent prices.')
-            return
-        data = {
-            'date': today.isoformat(),
-            'source': 'ベルクス戸田店 公式チラシ',
-            'source_url': pdf_url,
-            'sale_items': items,
-            'recipes': recipes(items),
-            'shopping': sorted(set(sum(([x for x in r['extra']] for r in recipes(items)), []))),
-            'updated_at': dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).isoformat(timespec='minutes')
-        }
-        with open('data.json', 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        api_key = os.environ.get('ANTHROPIC_API_KEY', '').strip()
+        if api_key:
+            # 1ページあたり約1.2MPに収まる解像度。細かい価格表示が読める範囲で小さめにする。
+            pages = render_pages(pdf, td, 110)
+            print(f'Sending {len(pages)} page(s) to {MODEL}', flush=True)
+            items, recipes, shopping = ask_claude(pages, today, api_key)
+            base.update(sale_items=items, recipes=recipes, shopping=shopping, reader='claude')
+        else:
+            print('ANTHROPIC_API_KEY is not set; falling back to Tesseract OCR.', flush=True)
+            pages = render_pages(pdf, td, 200)
+            items = fallback_items(tesseract_text(pages))
+            base.update(sale_items=items, reader='tesseract')
+
+    if not base['sale_items']:
+        base['status'] = 'no_items'
+    elif not base['recipes']:
+        base['status'] = 'no_recipes'
+    print(json.dumps({k: base[k] for k in ('status', 'sale_items')}, ensure_ascii=False)[:1500], flush=True)
+    write(base)
+
 
 if __name__ == '__main__':
     main()
