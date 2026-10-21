@@ -5,42 +5,44 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ベルクス飯｜戸田店</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yusei+Magic&family=Klee+One:wght@400;600&display=swap">
 <style>
+/* 白い紙にペンとマーカーで書いたメモ。見出しはマーカー、本文はペン字 */
 :root{
-  --paper:#fffbea;--paper-2:#fff3c4;--ink:#2a1d14;--muted:#6e5d4a;--red:#d7261e;--red-ink:#fff;--line:#e9d9a6;--card:#fff;
-  --display:"Dela Gothic One","Hiragino Kaku Gothic StdN","Noto Sans JP",sans-serif;
-  --body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  --paper:#ffffff;--ink:#2b2b2b;--muted:#6b6b6b;--line:#d9d9d9;--red:#e0483e;--marker:#ffe66d;--soft:#f6f6f4;
+  --display:"Yusei Magic","Klee One","Hiragino Maru Gothic ProN",sans-serif;
+  --body:"Klee One","Hiragino Mincho ProN","Yu Mincho",serif;
   color-scheme:light;
 }
-@media (prefers-color-scheme:dark){:root{--paper:#1c1712;--paper-2:#2a2218;--ink:#f6ecd8;--muted:#bba98e;--red:#ff5a4e;--red-ink:#1c0f0c;--line:#3d3324;--card:#241e17;color-scheme:dark}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.7;
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.8;
   padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left))}
-.wrap{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
-.store{align-self:flex-start;background:var(--red);color:var(--red-ink);font-family:var(--display);font-size:13px;letter-spacing:.08em;padding:3px 10px;border-radius:3px}
+.wrap{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:26px}
+.store{align-self:flex-start;font-family:var(--display);font-size:14px;color:var(--red);border:2px solid var(--red);padding:1px 10px;border-radius:255px 15px 225px 15px/15px 225px 15px 255px;transform:rotate(-2deg)}
 header{display:flex;flex-direction:column;gap:6px}
-h1{font-family:var(--display);font-weight:400;font-size:clamp(28px,8vw,40px);line-height:1.2;margin:0}
-h1 em{font-style:normal;color:var(--red)}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(30px,8.5vw,42px);line-height:1.25;margin:0}
+h1 em{font-style:normal;background:linear-gradient(transparent 55%,var(--marker) 55%)}
 .date{color:var(--muted);font-size:14px;margin:0}
-h2{font-family:var(--display);font-weight:400;font-size:18px;margin:0}
+h2{font-family:var(--display);font-weight:400;font-size:20px;margin:0;border-bottom:2px dashed var(--line);padding-bottom:4px}
 section{display:flex;flex-direction:column;gap:12px}
-.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
-.tag{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:2px;min-width:0}
-.tag .nm{font-weight:700;font-size:14px;line-height:1.35}
-.tag .pr{font-family:var(--display);color:var(--red);font-size:22px;line-height:1.1;font-variant-numeric:tabular-nums}
-.tag .pr small{font-family:var(--body);font-size:11px;font-weight:700;margin-left:2px}
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px}
+.tag{background:var(--paper);border:1.5px solid var(--ink);border-radius:255px 15px 225px 15px/15px 225px 15px 255px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tag:nth-child(even){transform:rotate(.6deg)}
+.tag:nth-child(odd){transform:rotate(-.5deg)}
+.tag .nm{font-weight:600;font-size:14px;line-height:1.4}
+.tag .pr{font-family:var(--display);color:var(--red);font-size:24px;line-height:1.15;font-variant-numeric:tabular-nums}
+.tag .pr small{font-family:var(--body);font-size:12px;font-weight:600;margin-left:2px}
 .tag .nt{font-size:12px;color:var(--muted)}
-.rc{background:var(--card);border:2px solid var(--ink);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px}
-.rc h3{font-family:var(--display);font-weight:400;font-size:20px;margin:0;line-height:1.3}
-.meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700}
-.meta span{padding:2px 8px;border-radius:4px;background:var(--paper-2)}
-.meta .use{background:var(--red);color:var(--red-ink)}
+.rc{background:var(--paper);border:2px solid var(--ink);border-radius:15px 225px 15px 255px/255px 15px 225px 15px;padding:18px;display:flex;flex-direction:column;gap:8px}
+.rc h3{font-family:var(--display);font-weight:400;font-size:22px;margin:0;line-height:1.35}
+.meta{display:flex;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:600}
+.meta span{padding:0 8px;border-radius:4px;background:var(--soft)}
+.meta .use{background:linear-gradient(transparent 40%,var(--marker) 40%);border-radius:0;padding:0 4px}
 .why{margin:0;font-size:14px;color:var(--muted)}
-.rc h4{margin:4px 0 0;font-size:13px;letter-spacing:.06em}
-.rc ul,.rc ol,.shop ul{margin:0;padding-left:1.3em}
-.box{background:var(--paper-2);border:2px dashed var(--line);border-radius:10px;padding:16px}
-a.btn{align-self:flex-start;display:inline-block;padding:10px 16px;background:var(--ink);color:var(--paper);border-radius:10px;text-decoration:none;font-weight:700}
+.rc h4{margin:4px 0 0;font-size:14px;font-weight:600}
+.rc ul,.rc ol,.shop ul{margin:0;padding-left:1.4em}
+.box{background:var(--soft);border:2px dashed var(--line);border-radius:12px;padding:16px}
+a.btn{align-self:flex-start;display:inline-block;padding:8px 18px;color:var(--ink);border:2px solid var(--ink);border-radius:255px 15px 225px 15px/15px 225px 15px 255px;text-decoration:none;font-family:var(--display)}
 a.btn:focus-visible{outline:3px solid var(--red);outline-offset:2px}
 footer{font-size:12px;color:var(--muted)}
 </style>
