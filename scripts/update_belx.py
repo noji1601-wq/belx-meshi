@@ -64,7 +64,7 @@ def ocr_pdf(pdf_path, outdir):
             texts.append(result.stdout)
         else:
             print(f'OCR returned no text for page {i}.', flush=True)
-    return '\\n'.join(texts)
+    return '\n'.join(texts)
 
 
 def price_items(text):
