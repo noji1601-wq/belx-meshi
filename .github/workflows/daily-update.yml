@@ -1,5 +1,10 @@
 name: Daily Belx update
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/daily-update.yml'
+      - 'scripts/**'
   workflow_dispatch:
   schedule:
     - cron: '40 22 * * *'
@@ -11,24 +16,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Update data
+      - name: Install OCR tools
         run: |
-          python - <<'PY'
-          import json,datetime
-          p='data.json'
-          try:
-            d=json.load(open(p,encoding='utf-8'))
-          except Exception:
-            d={}
-          d['updated_at']=datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).isoformat(timespec='minutes')
-          d.setdefault('date',datetime.date.today().isoformat())
-          d.setdefault('source','ベルクス戸田店 公式チラシ')
-          json.dump(d,open(p,'w',encoding='utf-8'),ensure_ascii=False,indent=2)
-          PY
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-jpn
+      - name: Fetch flyer, OCR and build recipes
+        run: python scripts/update_belx.py
       - name: Commit changes
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add data.json
-          git diff --cached --quiet || git commit -m 'chore: daily update'
+          git diff --cached --quiet || git commit -m 'chore: update Belx flyer and recipes'
           git push
