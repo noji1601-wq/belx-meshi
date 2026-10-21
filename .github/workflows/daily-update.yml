@@ -24,7 +24,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y poppler-utils tesseract-ocr tesseract-ocr-jpn
-      - name: Fetch flyer, OCR and build recipes
+      - name: Fetch flyer, read sale items and build recipes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python scripts/update_belx.py
       - name: Commit changes
         run: |
