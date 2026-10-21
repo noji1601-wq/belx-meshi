@@ -1,27 +1,99 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>ベルクス飯｜戸田店</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
 <style>
-body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;background:#f5f6f8;margin:0;color:#222}.wrap{max-width:900px;margin:auto;padding:20px}.hero{background:#111;color:#fff;border-radius:20px;padding:24px;margin-bottom:16px}.hero h1{margin:0 0 6px;font-size:28px}.muted{color:#777}.hero .muted{color:#bbb}.card{background:#fff;border-radius:18px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #0000000d}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.recipe h2{font-size:20px;margin:0 0 8px}.tag{display:inline-block;background:#eee;border-radius:999px;padding:4px 9px;font-size:12px;margin:2px}.price{font-size:13px;color:#555}.shopping li{margin:6px 0}.error{background:#fff3f3;border:1px solid #f3cccc}.small{font-size:12px}.btn{display:inline-block;padding:10px 14px;background:#111;color:#fff;border-radius:10px;text-decoration:none;margin-top:8px}
-</style></head>
-<body><main class="wrap"><section class="hero"><h1>ベルクス飯</h1><div>ベルクス戸田店の今日の特売から、夕飯を3案。</div><div id="date" class="muted"></div></section><div id="app"><div class="card">読み込み中…</div></div></main>
-<script>
-async function main(){
- const app=document.getElementById('app');
- try{
-  const r=await fetch('data.json?'+Date.now()); if(!r.ok) throw new Error('data.json unavailable');
-  const d=await r.json(); document.getElementById('date').textContent=`${d.date} 更新｜${d.source||'公式チラシ'}`;
-  if(d.error){app.innerHTML=`<div class="card error"><b>今日は自動取得に失敗しました</b><p>${esc(d.error)}</p><p class="small">次回の自動実行で再試行します。</p></div>`;return;}
-  let html='';
-  html+='<section class="card"><h2>今日の特売</h2><div>'+((d.sale_items||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join('')||'抽出できた商品なし')+'</div></section>';
-  html+='<section class="grid">'+(d.recipes||[]).map(x=>`<article class="card recipe"><h2>${esc(x.name)}</h2><div class="price">${esc(x.reason||'特売品を優先')}</div><h3>材料</h3><ul>${(x.ingredients||[]).map(i=>`<li>${esc(i)}</li>`).join('')}</ul><h3>作り方</h3><ol>${(x.steps||[]).map(i=>`<li>${esc(i)}</li>`).join('')}</ol></article>`).join('')+'</section>';
-  html+='<section class="card shopping"><h2>まとめ買い</h2><ul>'+((d.shopping||[]).map(x=>`<li>${esc(x)}</li>`).join('')||'<li>特売品を確認してください</li>')+'</ul>'+(d.flyer_url?`<a class="btn" href="${escAttr(d.flyer_url)}" target="_blank" rel="noopener">公式チラシを見る</a>`:'')+'</section>';
-  app.innerHTML=html;
- }catch(e){app.innerHTML='<div class="card error">データを読み込めませんでした。少し時間を置いて再読み込みしてください。</div>';}
+:root{
+  --paper:#fffbea;--paper-2:#fff3c4;--ink:#2a1d14;--muted:#6e5d4a;--red:#d7261e;--red-ink:#fff;--line:#e9d9a6;--card:#fff;
+  --display:"Dela Gothic One","Hiragino Kaku Gothic StdN","Noto Sans JP",sans-serif;
+  --body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  color-scheme:light;
 }
-function esc(s){return String(s??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\\':'&#92;','"':'&quot;'}[c]));}
-function escAttr(s){return esc(s).replace(/'/g,'&#39;');}
+@media (prefers-color-scheme:dark){:root{--paper:#1c1712;--paper-2:#2a2218;--ink:#f6ecd8;--muted:#bba98e;--red:#ff5a4e;--red-ink:#1c0f0c;--line:#3d3324;--card:#241e17;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.7;
+  padding:max(20px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left))}
+.wrap{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.store{align-self:flex-start;background:var(--red);color:var(--red-ink);font-family:var(--display);font-size:13px;letter-spacing:.08em;padding:3px 10px;border-radius:3px}
+header{display:flex;flex-direction:column;gap:6px}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(28px,8vw,40px);line-height:1.2;margin:0}
+h1 em{font-style:normal;color:var(--red)}
+.date{color:var(--muted);font-size:14px;margin:0}
+h2{font-family:var(--display);font-weight:400;font-size:18px;margin:0}
+section{display:flex;flex-direction:column;gap:12px}
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.tag{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tag .nm{font-weight:700;font-size:14px;line-height:1.35}
+.tag .pr{font-family:var(--display);color:var(--red);font-size:22px;line-height:1.1;font-variant-numeric:tabular-nums}
+.tag .pr small{font-family:var(--body);font-size:11px;font-weight:700;margin-left:2px}
+.tag .nt{font-size:12px;color:var(--muted)}
+.rc{background:var(--card);border:2px solid var(--ink);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.rc h3{font-family:var(--display);font-weight:400;font-size:20px;margin:0;line-height:1.3}
+.meta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700}
+.meta span{padding:2px 8px;border-radius:4px;background:var(--paper-2)}
+.meta .use{background:var(--red);color:var(--red-ink)}
+.why{margin:0;font-size:14px;color:var(--muted)}
+.rc h4{margin:4px 0 0;font-size:13px;letter-spacing:.06em}
+.rc ul,.rc ol,.shop ul{margin:0;padding-left:1.3em}
+.box{background:var(--paper-2);border:2px dashed var(--line);border-radius:10px;padding:16px}
+a.btn{align-self:flex-start;display:inline-block;padding:10px 16px;background:var(--ink);color:var(--paper);border-radius:10px;text-decoration:none;font-weight:700}
+a.btn:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+footer{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <span class="store">ベルクス 戸田店</span>
+    <h1>今日の<em>特売</em>で<br>夕飯3品</h1>
+    <p class="date" id="date">読み込み中…</p>
+  </header>
+  <div id="app"></div>
+  <footer>毎朝7時40分ごろに公式チラシから自動更新。価格・在庫は店頭で確認してください。</footer>
+</main>
+<script>
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function main(){
+  const app=document.getElementById('app');
+  try{
+    const r=await fetch('data.json?'+Date.now()); if(!r.ok) throw new Error();
+    const d=await r.json();
+    document.getElementById('date').textContent=`${d.date} のチラシ（${(d.updated_at||'').slice(11,16)} 更新）`;
+    const flyer=d.source_url?`<a class="btn" href="${esc(d.source_url)}" target="_blank" rel="noopener">公式チラシPDFを見る</a>`:'';
+    if(d.status && d.status!=='ok'){
+      const msg=d.status==='no_items'?'今日のチラシから特売品を読み取れませんでした。':'特売品は取れましたが、レシピを作れませんでした。';
+      app.innerHTML=`<section><div class="box"><b>${msg}</b><br>次回の自動更新で再試行します。</div>${shelf(d.sale_items)}${flyer}</section>`;
+      return;
+    }
+    app.innerHTML=`
+      <section><h2>今日の特売</h2>${shelf(d.sale_items)}</section>
+      <section><h2>夕飯3品</h2>${(d.recipes||[]).map(card).join('')}</section>
+      ${(d.shopping||[]).length?`<section class="shop"><h2>買い足すもの</h2><ul>${d.shopping.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></section>`:''}
+      ${flyer}`;
+  }catch(e){
+    app.innerHTML='<div class="box">データを読み込めませんでした。少し時間をおいて再読み込みしてください。</div>';
+  }
+}
+function shelf(items){
+  if(!items||!items.length) return '';
+  return '<div class="shelf">'+items.map(i=>{
+    const p=i.price!=null&&i.price!==''?`<span class="pr">${esc(i.price)}<small>円</small></span>`:'';
+    const sub=[i.unit,i.note].filter(Boolean).join('・');
+    return `<div class="tag"><span class="nm">${esc(i.name)}</span>${p}${sub?`<span class="nt">${esc(sub)}</span>`:''}</div>`;
+  }).join('')+'</div>';
+}
+function card(r){
+  return `<article class="rc"><h3>${esc(r.name)}</h3>
+    <div class="meta">${r.minutes?`<span>約${esc(r.minutes)}分</span>`:''}${(r.uses||[]).map(u=>`<span class="use">特売 ${esc(u)}</span>`).join('')}</div>
+    ${r.reason?`<p class="why">${esc(r.reason)}</p>`:''}
+    <h4>材料（2人分）</h4><ul>${(r.ingredients||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+    <h4>作り方</h4><ol>${(r.steps||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ol></article>`;
+}
 main();
-</script></body></html>
+</script>
+</body>
+</html>
