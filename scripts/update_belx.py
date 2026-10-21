@@ -28,28 +28,39 @@ def find_pdf(html):
 
 
 def ocr_pdf(pdf_path, outdir):
-    # Prefer the PDF's embedded text layer when available; it is much more accurate than OCR.
+    # Prefer embedded text; log each stage and bound OCR runtime.
     txt_path = os.path.join(outdir, 'embedded.txt')
+    print('Step 1/3: trying embedded PDF text', flush=True)
     try:
-        subprocess.run(['pdftotext', '-layout', pdf_path, txt_path], check=True, timeout=20)
+        subprocess.run(['pdftotext', '-layout', pdf_path, txt_path], check=True, timeout=12)
         with open(txt_path, encoding='utf-8', errors='ignore') as f:
             embedded = f.read()
         if len(embedded) > 100 and len(re.findall(r'[ぁ-んァ-ヶ一-龠]', embedded)) > 30:
-            print('Using embedded PDF text layer.')
+            print(f'Embedded text found ({len(embedded)} characters).', flush=True)
             return embedded
-    except (subprocess.SubprocessError, OSError):
-        pass
+        print('No usable embedded text; switching to OCR.', flush=True)
+    except (subprocess.SubprocessError, OSError) as e:
+        print(f'Embedded text extraction unavailable: {e}; switching to OCR.', flush=True)
+
     prefix = os.path.join(outdir, 'page')
-    subprocess.run(['pdftoppm', '-jpeg', '-jpegopt', 'quality=92', '-r', '240', pdf_path, prefix], check=True, timeout=90)
+    print('Step 2/3: rendering up to first 3 pages at 180 dpi', flush=True)
+    subprocess.run(['pdftoppm', '-f', '1', '-l', '3', '-jpeg', '-jpegopt', 'quality=88', '-r', '180', pdf_path, prefix], check=True, timeout=45)
     pages = sorted(x for x in os.listdir(outdir) if x.startswith('page-') and x.endswith('.jpg'))
+    if not pages:
+        raise RuntimeError('PDF render produced no pages')
     texts = []
-    for page in pages:
+    for i, page in enumerate(pages, 1):
         p = os.path.join(outdir, page)
-        for mode in ('11', '6'):
-            result = subprocess.run(['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', mode], capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=90)
-            if result.stdout.strip():
-                texts.append(result.stdout)
-    return '\n'.join(texts)
+        print(f'Step 3/3: OCR page {i}/{len(pages)}', flush=True)
+        result = subprocess.run(
+            ['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', '11'],
+            capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=35
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            texts.append(result.stdout)
+        else:
+            print(f'OCR returned no text for page {i}.', flush=True)
+    return '\\n'.join(texts)
 
 
 def price_items(text):
