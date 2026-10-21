@@ -20,7 +20,7 @@ def fetch(url):
 def find_pdf(html):
     text = html.decode('utf-8', 'ignore')
     # Store pages may contain older flyer links before the visible "PDF版チラシ" button.
-    links = re.findall(r"(?:href|src)=[\"']([^\"']+\.pdf(?:\?[^\"']*)?)[\"']", text, re.I)
+    links = re.findall(r"""(?:href|src)=["']([^"']+\.pdf(?:\?[^"']*)?)["']""", text, re.I)
     candidates = []
     for link in links:
         url = urllib.parse.urljoin(STORE_URL, link)
