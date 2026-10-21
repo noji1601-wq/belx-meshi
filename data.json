@@ -2,9 +2,10 @@
   "date": "2026-10-22",
   "source": "ベルクス戸田店 公式チラシ",
   "source_url": "https://sunbelx.com/upload/Flyer/files/e_f_1955_6ad023d5-1e64-45ab-85b6-4281b7b55302.pdf",
-  "status": "ocr_no_items",
+  "status": "no_items",
   "sale_items": [],
   "recipes": [],
   "shopping": [],
-  "updated_at": "2026-10-22T04:38+09:00"
+  "updated_at": "2026-10-22T04:58+09:00",
+  "reader": "tesseract"
 }
