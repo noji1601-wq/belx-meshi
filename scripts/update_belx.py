@@ -62,6 +62,14 @@ def price_items(text):
         m = re.search(pat, text, re.I)
         if m:
             found.append({'name': name, 'price': int(m.group(1))})
+    if not found:
+        # OCR sometimes drops the yen sign and splits price from product name.
+        compact = re.sub(r'\s+', '', text)
+        labels = [('豚こま', '豚こま'), ('豚肉', '豚肉'), ('鶏もも肉', '鶏もも'), ('鶏むね肉', '鶏むね'), ('牛肉', '牛肉'), ('鮭', '鮭'), ('ぶり', 'ぶり'), ('白菜', '白菜'), ('キャベツ', 'キャベツ'), ('長ねぎ', '長ねぎ'), ('ほうれん草', 'ほうれん草'), ('なす', 'なす'), ('卵', 'たまご|卵'), ('豆腐', '豆腐'), ('納豆', '納豆')]
+        for name, label in labels:
+            m = re.search(label + r'.{0,100}?(\d{2,4})', compact, re.I)
+            if m and 10 <= int(m.group(1)) <= 5000:
+                found.append({'name': name, 'price': int(m.group(1))})
     return found
 
 
@@ -101,8 +109,14 @@ def main():
         pos = text.find(date_pat)
         focus = text[max(0, pos-3000):pos+9000] if pos >= 0 else text
         items = price_items(focus)
+        print(f'Flyer PDF: {pdf_url}')
+        print(f'OCR preview: {text[:1200]}')
         if not items:
-            raise RuntimeError('OCR succeeded but no sale items were confidently extracted')
+            data = {'date': today.isoformat(), 'source': 'ベルクス戸田店 公式チラシ', 'source_url': pdf_url, 'status': 'ocr_no_items', 'sale_items': [], 'recipes': [], 'shopping': [], 'updated_at': dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).isoformat(timespec='minutes')}
+            with open('data.json', 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            print('No reliable sale items found; did not invent prices.')
+            return
         data = {
             'date': today.isoformat(),
             'source': 'ベルクス戸田店 公式チラシ',
