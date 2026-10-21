@@ -52,9 +52,10 @@ def ocr_pdf(pdf_path, outdir):
     for i, page in enumerate(pages, 1):
         p = os.path.join(outdir, page)
         print(f'Step 3/3: OCR page {i}/{len(pages)}', flush=True)
-        result = subprocess.run(
-            ['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', '11'],
-            capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=20
+        try:
+            result = subprocess.run(
+                ['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', '11'],
+                capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=20
             )
         except subprocess.TimeoutExpired:
             print(f'OCR page {i} exceeded 20 seconds; skipping page.', flush=True)
