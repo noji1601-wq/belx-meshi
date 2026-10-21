@@ -19,12 +19,17 @@ def fetch(url):
 
 def find_pdf(html):
     text = html.decode('utf-8', 'ignore')
-    links = re.findall(r'(?:href|src)=[\"\']([^\"\']+\.pdf(?:\?[^\"\']*)?)[\"\']', text, re.I)
+    # Store pages may contain older flyer links before the visible "PDF版チラシ" button.
+    links = re.findall(r'(?:href|src)=[\"\\']([^\"\\']+\.pdf(?:\?[^"\"\\']*)?)[\"\\']', text, re.I)
+    candidates = []
     for link in links:
         url = urllib.parse.urljoin(STORE_URL, link)
-        if '/upload/Flyer/' in url or 'sunbelx.com' in url:
-            return url
-    raise RuntimeError('official flyer PDF link not found')
+        if 'sunbelx.com/upload/Flyer/' in url:
+            candidates.append(url)
+    if not candidates:
+        raise RuntimeError('official flyer PDF link not found')
+    # The current flyer link is usually the final matching link in the store page.
+    return candidates[-1]
 
 
 def ocr_pdf(pdf_path, outdir):
