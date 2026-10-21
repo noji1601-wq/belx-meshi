@@ -29,13 +29,16 @@ def find_pdf(html):
 
 def ocr_pdf(pdf_path, outdir):
     prefix = os.path.join(outdir, 'page')
-    subprocess.run(['pdftoppm', '-png', '-r', '150', pdf_path, prefix], check=True)
+    subprocess.run(['pdftoppm', '-png', '-r', '250', pdf_path, prefix], check=True)
     pages = sorted(x for x in os.listdir(outdir) if x.startswith('page-') and x.endswith('.png'))
     texts = []
     for page in pages:
         p = os.path.join(outdir, page)
-        result = subprocess.run(['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', '6'], capture_output=True, text=True, encoding='utf-8', errors='ignore')
-        texts.append(result.stdout)
+        # Flyers use dense multi-column layouts; sparse-text mode works better than a single block.
+        for mode in ('11', '12', '6'):
+            result = subprocess.run(['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', mode], capture_output=True, text=True, encoding='utf-8', errors='ignore')
+            if result.stdout.strip():
+                texts.append(result.stdout)
     return '\n'.join(texts)
 
 
