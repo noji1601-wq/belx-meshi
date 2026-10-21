@@ -28,15 +28,25 @@ def find_pdf(html):
 
 
 def ocr_pdf(pdf_path, outdir):
+    # Prefer the PDF's embedded text layer when available; it is much more accurate than OCR.
+    txt_path = os.path.join(outdir, 'embedded.txt')
+    try:
+        subprocess.run(['pdftotext', '-layout', pdf_path, txt_path], check=True, timeout=20)
+        with open(txt_path, encoding='utf-8', errors='ignore') as f:
+            embedded = f.read()
+        if len(embedded) > 100 and len(re.findall(r'[ぁ-んァ-ヶ一-龠]', embedded)) > 30:
+            print('Using embedded PDF text layer.')
+            return embedded
+    except (subprocess.SubprocessError, OSError):
+        pass
     prefix = os.path.join(outdir, 'page')
-    subprocess.run(['pdftoppm', '-jpeg', '-jpegopt', 'quality=85', '-r', '150', pdf_path, prefix], check=True, timeout=90)
+    subprocess.run(['pdftoppm', '-jpeg', '-jpegopt', 'quality=92', '-r', '240', pdf_path, prefix], check=True, timeout=90)
     pages = sorted(x for x in os.listdir(outdir) if x.startswith('page-') and x.endswith('.jpg'))
     texts = []
     for page in pages:
         p = os.path.join(outdir, page)
-        # Flyers use dense multi-column layouts; sparse-text mode works better than a single block.
-        for mode in ('11',):
-            result = subprocess.run(['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', mode], capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=75)
+        for mode in ('11', '6'):
+            result = subprocess.run(['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', mode], capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=90)
             if result.stdout.strip():
                 texts.append(result.stdout)
     return '\n'.join(texts)
