@@ -45,6 +45,12 @@ section{display:flex;flex-direction:column;gap:12px}
 a.btn{align-self:flex-start;display:inline-block;padding:8px 18px;color:var(--ink);border:2px solid var(--ink);border-radius:255px 15px 225px 15px/15px 225px 15px 255px;text-decoration:none;font-family:var(--display)}
 a.btn:focus-visible{outline:3px solid var(--red);outline-offset:2px}
 footer{font-size:12px;color:var(--muted)}
+body::before,body::after{content:"";position:fixed;width:min(48vw,280px);aspect-ratio:1;background:var(--kin,none) no-repeat center/contain;opacity:.55;pointer-events:none;z-index:0}
+body::before{top:0;right:0}
+body::after{bottom:0;left:0;transform:rotate(180deg)}
+body{background-image:var(--petal,none);background-size:200px}
+.wrap{position:relative;z-index:1}
+.tag,.rc{background:rgba(255,255,255,.9)}
 </style>
 </head>
 <body>
@@ -95,6 +101,22 @@ function card(r){
     <h4>材料（2人分）</h4><ul>${(r.ingredients||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
     <h4>作り方</h4><ol>${(r.steps||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ol></article>`;
 }
+// 金木犀の背景イラスト（SVGをその場で描く）
+(function(){
+  let seed=7;const rnd=()=>((seed=seed*16807%2147483647)/2147483647);
+  const D='<defs><g id="f"><g fill="#f5a23c"><ellipse cy="-3.6" rx="2.7" ry="3.8"/><ellipse cx="3.6" rx="3.8" ry="2.7"/><ellipse cy="3.6" rx="2.7" ry="3.8"/><ellipse cx="-3.6" rx="3.8" ry="2.7"/></g><circle r="1.5" fill="#d8711d"/></g><g id="lf"><path d="M0 0C16-9 38-7 54 0C38 7 16 9 0 0Z" fill="#86a874"/><path d="M3 0Q28-1 50 0" stroke="#5f8452" stroke-width="1.1" fill="none"/></g></defs>';
+  const use=(id,x,y,a,s)=>`<use href="#${id}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${a|0}) scale(${s.toFixed(2)})"/>`;
+  const cl=(x,y,n,r)=>Array.from({length:n},()=>use('f',x+(rnd()*2-1)*r,y+(rnd()*2-1)*r,rnd()*90,.75+rnd()*.35)).join('');
+  const st='stroke="#8b6b52" fill="none" stroke-linecap="round"';
+  const br=`<path d="M262 6C214 30 178 58 146 98S92 178 58 214 18 252 4 258" ${st} stroke-width="3.2"/><path d="M168 76C186 92 196 112 200 134" ${st} stroke-width="2.2"/><path d="M104 152C88 160 74 162 58 160" ${st} stroke-width="2"/>`;
+  const lv=[[226,26,200,1],[214,32,140,.9],[178,60,215,.95],[160,84,120,1],[198,128,70,.85],[132,118,210,.9],[116,138,110,.95],[80,186,215,.85],[66,198,120,.9],[60,160,190,.8],[34,232,140,.8]].map(v=>use('lf',...v)).join('');
+  const fl=cl(196,46,9,11)+cl(150,98,10,11)+cl(200,146,7,9)+cl(100,162,9,11)+cl(52,222,8,11)+cl(66,170,5,7);
+  const corner=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 264 264">${D}${br}${lv}${fl}</svg>`;
+  const petal=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">${D}<g opacity=".35">${[[30,40,10,.8],[140,22,40,.6],[96,110,70,.7],[170,150,20,.55],[40,170,55,.65]].map(v=>use('f',...v)).join('')}</g></svg>`;
+  const u=svg=>`url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  document.documentElement.style.setProperty('--kin',u(corner));
+  document.documentElement.style.setProperty('--petal',u(petal));
+})();
 main();
 </script>
 </body>
