@@ -57,16 +57,25 @@ def ocr_pdf(pdf_path, outdir):
     for i, page in enumerate(pages, 1):
         p = os.path.join(outdir, page)
         print(f'Step 3/3: OCR page {i}/{len(pages)}', flush=True)
-        try:
-            result = subprocess.run(
-                ['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', '6'],
-                capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=45
-            )
-        except subprocess.TimeoutExpired:
-            print(f'OCR page {i} exceeded 45 seconds; skipping page.', flush=True)
-            continue
-        if result.returncode == 0 and result.stdout.strip():
-            texts.append(result.stdout)
+        # Flyers are multi-column layouts: sparse-text mode is usually more reliable
+        # than treating the entire page as one text block. Try both modes and keep
+        # the result with more Japanese text, while bounding runtime.
+        candidates = []
+        for psm in ('11', '6'):
+            try:
+                result = subprocess.run(
+                    ['tesseract', p, 'stdout', '-l', 'jpn+eng', '--psm', psm],
+                    capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=35
+                )
+            except subprocess.TimeoutExpired:
+                print(f'OCR page {i} PSM {psm} timed out; trying next mode.', flush=True)
+                continue
+            if result.returncode == 0 and result.stdout.strip():
+                candidates.append(result.stdout)
+        if candidates:
+            best = max(candidates, key=lambda x: len(re.findall(r'[ぁ-んァ-ヶ一-龠]', x)))
+            texts.append(best)
+            print(f'OCR page {i}: selected text with {len(re.findall(r"[ぁ-んァ-ヶ一-龠]", best))} Japanese characters.', flush=True)
         else:
             print(f'OCR returned no text for page {i}.', flush=True)
     return '\n'.join(texts)
