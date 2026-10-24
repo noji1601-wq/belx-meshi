@@ -71,6 +71,8 @@ async function main(){
     const r=await fetch('data.json?'+Date.now()); if(!r.ok) throw new Error();
     const d=await r.json();
     document.getElementById('date').textContent=`${d.date} のチラシ（${(d.updated_at||'').slice(11,16)} 更新）`;
+    const todayJst=new Date(Date.now()+9*3600e3).toISOString().slice(0,10);
+    if(d.date!==todayJst) document.getElementById('date').textContent+=' ※今日の分はまだ反映されていません';
     const flyer=d.source_url?`<a class="btn" href="${esc(d.source_url)}" target="_blank" rel="noopener">公式チラシPDFを見る</a>`:'';
     if(d.status && d.status!=='ok'){
       const msg=d.status==='no_items'?'今日のチラシから特売品を読み取れませんでした。':'特売品は取れましたが、レシピを作れませんでした。';
