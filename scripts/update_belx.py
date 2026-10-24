@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -30,7 +31,7 @@ PROMPT = """添付画像は、埼玉県戸田市「ベルクス 戸田店」の�
    基本調味料（塩・こしょう・醤油・砂糖・みりん・酒・味噌・油・ごま油・片栗粉・鶏がらスープの素）は家にある前提。
 3. shopping には、3品を作るのに特売品以外で買い足しが必要なものだけを入れてください。
 
-次の形のJSONだけを返してください。前後に文章は付けないこと。
+結果は save_result ツールで保存してください。各項目の形は次の例のとおりです。
 {{"sale_items":[{{"name":"国産豚こま切れ","price":98,"unit":"100g","note":"お一人様2点まで"}}],
  "recipes":[{{"name":"料理名","minutes":20,"uses":["豚こま","キャベツ"],"reason":"一言でおすすめ理由",
    "ingredients":["豚こま切れ 200g"],"steps":["手順1","手順2"]}}],
@@ -38,10 +39,45 @@ PROMPT = """添付画像は、埼玉県戸田市「ベルクス 戸田店」の�
 recipes は必ず3件、steps は3〜6個。"""
 
 
+def retry(label, fn, tries=3, wait=20):
+    """一時的なエラー（通信・混雑・返答の崩れ）は少し待ってやり直す。"""
+    for i in range(1, tries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            print(f'{label}: attempt {i}/{tries} failed: {e}', flush=True)
+            if i == tries:
+                raise
+            time.sleep(wait * i)
+
+STR = {'type': 'string'}
+RESULT_TOOL = {
+    'name': 'save_result',
+    'description': 'チラシから読み取った特売品と、それを使った晩ごはんレシピ3品を保存する。',
+    'input_schema': {
+        'type': 'object',
+        'properties': {
+            'sale_items': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'name': STR, 'price': {'type': ['integer', 'null']}, 'unit': STR, 'note': STR},
+                'required': ['name']}},
+            'recipes': {'type': 'array', 'items': {'type': 'object', 'properties': {
+                'name': STR, 'minutes': {'type': 'integer'}, 'uses': {'type': 'array', 'items': STR},
+                'reason': STR, 'ingredients': {'type': 'array', 'items': STR},
+                'steps': {'type': 'array', 'items': STR}},
+                'required': ['name', 'ingredients', 'steps']}},
+            'shopping': {'type': 'array', 'items': STR},
+        },
+        'required': ['sale_items', 'recipes', 'shopping'],
+    },
+}
+
+
 def fetch(url):
-    req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return r.read()
+    def go():
+        req = urllib.request.Request(url, headers=HEADERS)
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.read()
+    return retry(f'fetch {url}', go)
 
 
 def find_pdf(html):
@@ -95,20 +131,30 @@ def ask_claude(pages, today, api_key):
     content.append({'type': 'text', 'text': PROMPT.format(today=today.isoformat())})
     body = json.dumps({
         'model': MODEL,
-        'max_tokens': 4000,
+        'max_tokens': 8000,
+        'tools': [RESULT_TOOL],
+        'tool_choice': {'type': 'tool', 'name': RESULT_TOOL['name']},
         'messages': [{'role': 'user', 'content': content}],
     }).encode()
     req = urllib.request.Request(
         'https://api.anthropic.com/v1/messages', data=body, method='POST',
         headers={'x-api-key': api_key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json'},
     )
-    try:
-        with urllib.request.urlopen(req, timeout=180) as r:
-            res = json.load(r)
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f'Claude API error {e.code}: {e.read().decode(errors="ignore")[:500]}')
-    reply = ''.join(b.get('text', '') for b in res.get('content', []) if b.get('type') == 'text')
-    data = parse_json(reply)
+    def call():
+        try:
+            with urllib.request.urlopen(req, timeout=240) as r:
+                res = json.load(r)
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f'Claude API error {e.code}: {e.read().decode(errors="ignore")[:500]}')
+        if res.get('stop_reason') == 'max_tokens':
+            raise RuntimeError('reply was cut off (max_tokens)')
+        # 結果はツール呼び出しの形で受け取るので、JSONの書式崩れが起きない
+        for b in res.get('content', []):
+            if b.get('type') == 'tool_use' and isinstance(b.get('input'), dict):
+                return b['input']
+        reply = ''.join(b.get('text', '') for b in res.get('content', []) if b.get('type') == 'text')
+        return parse_json(reply)
+    data = retry('Claude API', call, tries=3, wait=30)
     items = [x for x in data.get('sale_items', []) if isinstance(x, dict) and x.get('name')]
     recipes = [x for x in data.get('recipes', []) if isinstance(x, dict) and x.get('name')][:3]
     shopping = [str(x) for x in data.get('shopping', []) if x]
@@ -146,9 +192,33 @@ def write(data):
         f.write('\n')
 
 
+def previous():
+    try:
+        with open('data.json', encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def main():
     now = dt.datetime.now(JST)
     today = now.date()
+    prev = previous()
+    if prev.get('date') == today.isoformat() and prev.get('status') == 'ok' and os.environ.get('GITHUB_EVENT_NAME') == 'schedule':
+        print('Today is already updated; skipping this scheduled run.', flush=True)
+        return
+    try:
+        run(now, today)
+    except Exception as e:
+        # 失敗しても前回の内容は残し、失敗したことだけ記録する
+        print(f'Update failed: {e}', flush=True)
+        prev = prev or {'sale_items': [], 'recipes': [], 'shopping': []}
+        prev['last_error'] = f'{now.isoformat(timespec="minutes")} {str(e)[:300]}'
+        write(prev)
+        raise
+
+
+def run(now, today):
     base = {
         'date': today.isoformat(),
         'source': 'ベルクス戸田店 公式チラシ',
