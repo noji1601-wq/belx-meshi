@@ -133,7 +133,7 @@ def ask_claude(pages, today, api_key):
         'model': MODEL,
         'max_tokens': 8000,
         'tools': [RESULT_TOOL],
-        'tool_choice': {'type': 'tool', 'name': RESULT_TOOL['name']},
+        'tool_choice': {'type': 'auto'},
         'messages': [{'role': 'user', 'content': content}],
     }).encode()
     req = urllib.request.Request(
