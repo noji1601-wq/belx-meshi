@@ -154,5 +154,6 @@
     "生姜"
   ],
   "updated_at": "2026-10-23T09:54+09:00",
-  "reader": "claude"
+  "reader": "claude",
+  "last_error": "2026-10-24T17:11+09:00 Claude API error 400: {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"tool_choice: type \\\"tool\\\" and \\\"any\\\" are not supported for this model.\"},\"request_id\":\"req_011CgLj5sC9HSwiaGDjXkBTV\"}"
 }
