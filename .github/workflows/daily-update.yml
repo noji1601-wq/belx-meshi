@@ -7,13 +7,16 @@ on:
       - 'scripts/**'
   workflow_dispatch:
   schedule:
-    # 毎朝 7:40 JST（GitHubのcronはUTC基準なので 22:40 UTC）
-    - cron: '40 22 * * *'
+    # GitHubの定期実行は混雑で1〜2時間遅れることがあるため、早朝から複数回動かす
+    # （その日すでに更新済みなら何もしない）。時刻はUTC基準。
+    - cron: '40 19 * * *'   # 4:40 JST
+    - cron: '10 21 * * *'   # 6:10 JST
+    - cron: '40 22 * * *'   # 7:40 JST
     # 予備：朝の回が失敗・遅延したとき用（その日すでに更新済みなら何もしない）
     - cron: '40 2 * * *'
 concurrency:
   group: daily-belx-update
-  cancel-in-progress: true
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:
