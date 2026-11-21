@@ -132,5 +132,6 @@
     "長ねぎ 1本"
   ],
   "updated_at": "2026-11-20T10:26+09:00",
-  "reader": "claude"
+  "reader": "claude",
+  "last_error": "2026-11-21T09:56+09:00 Claude API error 401: {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011ChFAb4JZ43mQ2f35AZvUo\"}"
 }
