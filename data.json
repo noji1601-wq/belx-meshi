@@ -133,5 +133,5 @@
   ],
   "updated_at": "2026-11-20T10:26+09:00",
   "reader": "claude",
-  "last_error": "2026-11-27T13:31+09:00 Claude API error 401: {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011ChSoogcnE4WF2fFyZH9Pj\"}"
+  "last_error": "2026-11-27T20:22+09:00 Claude API error 401: {\"type\":\"error\",\"error\":{\"type\":\"authentication_error\",\"message\":\"invalid x-api-key\"},\"request_id\":\"req_011ChTM7vBEFobnSBDYrDkqz\"}"
 }
